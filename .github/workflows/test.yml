@@ -1,0 +1,183 @@
+name: Cross-Platform Testing
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: [3.7, 3.8, 3.9, '3.10', 3.11]
+        exclude:
+          # Reduce matrix size by excluding some combinations
+          - os: windows-latest
+            python-version: 3.7
+          - os: windows-latest
+            python-version: 3.8
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Display Python version
+      run: python -c "import sys; print(sys.version)"
+
+    - name: Run compatibility tests
+      run: python tests/test_universal_compatibility.py
+
+    - name: Test Simple Edition (non-interactive)
+      run: |
+        # Test that the script can be imported and basic functions work
+        python -c "
+        import sys
+        sys.path.append('src')
+        from goose_hints_builder_simple import get_user_platform_info
+        info = get_user_platform_info()
+        print(f'Platform detected: {info[\"system\"]}')
+        print('✅ Simple Edition import successful')
+        "
+
+    - name: Test Comprehensive Edition (non-interactive)
+      run: |
+        # Test that the script can be imported and basic functions work
+        python -c "
+        import sys
+        sys.path.append('src')
+        from goose_hints_builder_comprehensive import get_platform_info
+        info = get_platform_info()
+        print(f'Platform detected: {info[\"system\"]}')
+        print('✅ Comprehensive Edition import successful')
+        "
+
+    - name: Test Demo (non-interactive)
+      run: |
+        # Test that the demo can be imported
+        python -c "
+        import sys
+        sys.path.append('examples')
+        from demo_interactive_experience import get_user_platform_info
+        info = get_user_platform_info()
+        print(f'Demo platform detected: {info[\"system\"]}')
+        print('✅ Demo import successful')
+        "
+
+    - name: Validate file structure
+      run: |
+        python -c "
+        import os
+        from pathlib import Path
+        
+        # Check required files exist
+        required_files = [
+            'README.md',
+            'LICENSE',
+            'CONTRIBUTING.md',
+            'CHANGELOG.md',
+            'src/goose_hints_builder_simple.py',
+            'src/goose_hints_builder_comprehensive.py',
+            'examples/demo_interactive_experience.py',
+            'tests/test_universal_compatibility.py'
+        ]
+        
+        for file in required_files:
+            if not Path(file).exists():
+                raise FileNotFoundError(f'Required file missing: {file}')
+                
+        print('✅ All required files present')
+        "
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8
+        
+    - name: Lint with flake8
+      run: |
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 src/ examples/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 src/ examples/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit
+        
+    - name: Security scan with bandit
+      run: |
+        bandit -r src/ examples/ tests/ -f json -o bandit-report.json || true
+        bandit -r src/ examples/ tests/ --severity-level medium
+
+  validate-cross-platform:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+        
+    - name: Test platform-specific paths
+      run: |
+        python -c "
+        import sys
+        sys.path.append('src')
+        from goose_hints_builder_simple import get_user_platform_info
+        import platform
+        
+        info = get_user_platform_info()
+        system = platform.system()
+        
+        print(f'Detected OS: {system}')
+        print(f'Home directory: {info[\"home\"]}')
+        print(f'Projects directory: {info[\"projects\"]}')
+        print(f'Desktop directory: {info[\"desktop\"]}')
+        print(f'Documents directory: {info[\"documents\"]}')
+        
+        # Validate paths are appropriate for the platform
+        if system == 'Windows':
+            assert 'Documents' in str(info['projects'])
+            print('✅ Windows paths validated')
+        elif system == 'Darwin':
+            assert '/Users/' in str(info['home'])
+            print('✅ macOS paths validated')
+        else:  # Linux
+            assert str(info['home']).startswith('/home/') or str(info['home']).startswith('/root/')
+            print('✅ Linux paths validated')
+            
+        print('✅ Cross-platform path validation successful')
+        "
