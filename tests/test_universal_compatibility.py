@@ -6,9 +6,9 @@ Validates cross-platform compatibility without user interaction
 
 import sys
 import os
-sys.path.append('/Users/btheriault/Goose/personal_hint_creator')
+sys.path.append('src')
 
-from goose_hints_builder_universal import get_user_platform_info
+from goose_hints_builder_simple import get_user_platform_info
 
 def test_platform_detection():
     """Test platform detection functionality"""
